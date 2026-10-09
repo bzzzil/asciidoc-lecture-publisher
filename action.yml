@@ -1,0 +1,115 @@
+name: AsciiDoc Lecture Publisher
+description: Build and publish AsciiDoc presentations as HTML and PDF
+
+inputs:
+  lecture:
+    description: Lecture number, for example 01
+    required: true
+
+  deploy-host:
+    description: SSH hostname
+    required: true
+
+  deploy-root:
+    description: Absolute path to the web root on the server
+    required: true
+
+  deploy-path:
+    description: Relative publication path inside the web root
+    required: true
+
+  deploy-key:
+    description: Private SSH key for deployment
+    required: true
+
+  deploy-user:
+    description: SSH deployment user
+    required: false
+    default: lecture-deploy
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Validate lecture
+      shell: bash
+      env:
+        LECTURE: ${{ inputs.lecture }}
+      run: |
+        if [[ ! "$LECTURE" =~ ^[0-9]{2}$ ]]; then
+          echo "::error::Invalid lecture number: $LECTURE"
+          exit 1
+        fi
+
+        lecture="lecture${LECTURE}.adoc"
+
+        if [[ ! -f "$GITHUB_WORKSPACE/$lecture" ]]; then
+          echo "::error::Lecture file not found: $lecture"
+          exit 1
+        fi
+
+        echo "Lecture found: $lecture"
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci
+
+    - name: Install Playwright Chromium
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npx playwright install --with-deps chromium
+
+    - name: Export HTML
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        LECTURE: ${{ inputs.lecture }}
+      run: |
+        xvfb-run node \
+          "$GITHUB_ACTION_PATH/ci/export-presentation.js" \
+          "lecture${LECTURE}.adoc"
+
+    - name: Render PDF
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        LECTURE: ${{ inputs.lecture }}
+      run: |
+        node "$GITHUB_ACTION_PATH/ci/render-pdf.js" \
+          "build/lecture${LECTURE}/lecture${LECTURE}.html"
+
+    - name: Setup SSH
+      shell: bash
+      env:
+        DEPLOY_KEY: ${{ inputs.deploy-key }}
+        DEPLOY_HOST: ${{ inputs.deploy-host }}
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+
+        printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/lecture-deploy
+        chmod 600 ~/.ssh/lecture-deploy
+
+        ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+        chmod 644 ~/.ssh/known_hosts
+
+    - name: Publish lecture
+      shell: bash
+      env:
+        LECTURE: ${{ inputs.lecture }}
+        DEPLOY_HOST: ${{ inputs.deploy-host }}
+        DEPLOY_ROOT: ${{ inputs.deploy-root }}
+        DEPLOY_PATH: ${{ inputs.deploy-path }}
+        DEPLOY_USER: ${{ inputs.deploy-user }}
+      run: |
+        scp \
+          -r \
+          -i ~/.ssh/lecture-deploy \
+          "build/lecture${LECTURE}/." \
+          "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_ROOT%/}/${DEPLOY_PATH#/}/"
+
