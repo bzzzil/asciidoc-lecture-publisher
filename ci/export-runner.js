@@ -2,11 +2,22 @@ const fs = require('fs');
 const path = require('path');
 const vscode = require('vscode');
 
-const { postprocessHtml } = require('./postprocess-html');
-const { collectAssets } = require('./collect-assets');
+const {
+    collectAssets
+} = require('./collect-assets');
+
+const {
+    postprocessHtml
+} = require('./postprocess-html');
 
 async function run() {
     console.log('Extension Host started');
+
+    const workspaceRoot =
+        process.env.GITHUB_WORKSPACE ||
+        process.cwd();
+
+    console.log(`Workspace root: ${workspaceRoot}`);
 
     const presentationExtension =
         vscode.extensions.getExtension(
@@ -39,9 +50,17 @@ async function run() {
         throw new Error('No active editor');
     }
 
-    const inputFile = editor.document.uri.fsPath;
+    const inputFile = path.resolve(
+        editor.document.uri.fsPath
+    );
 
     console.log(`Input: ${inputFile}`);
+
+    if (!fs.existsSync(inputFile)) {
+        throw new Error(
+            `Input file does not exist: ${inputFile}`
+        );
+    }
 
     const lectureName = path.basename(
         inputFile,
@@ -49,7 +68,7 @@ async function run() {
     );
 
     const outputDir = path.join(
-        process.cwd(),
+        workspaceRoot,
         'build',
         lectureName
     );
@@ -71,6 +90,12 @@ async function run() {
         [outputFile]
     );
 
+    if (!fs.existsSync(outputFile)) {
+        throw new Error(
+            `HTML export did not produce the expected file: ${outputFile}`
+        );
+    }
+
     console.log('HTML export completed');
 
     postprocessHtml(outputFile);
@@ -80,14 +105,15 @@ async function run() {
     collectAssets(
         inputFile,
         outputDir,
-        presentationExtension
+        presentationExtension,
+        workspaceRoot
     );
 
     console.log('Asset collection completed');
-
     console.log('Export completed successfully');
 }
 
 module.exports = {
     run
 };
+

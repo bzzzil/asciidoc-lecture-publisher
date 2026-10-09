@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const cp = require('child_process');
 
 const {
@@ -15,31 +16,36 @@ if (!inputFile) {
     );
 }
 
-const repositoryRoot = path.resolve(
-    __dirname,
-    '..'
-);
+// Репозиторий с лекциями.
+const workspaceRoot =
+    process.env.GITHUB_WORKSPACE ||
+    process.cwd();
+
+// Репозиторий с реализацией Action.
+const actionRoot =
+    process.env.GITHUB_ACTION_PATH ||
+    path.resolve(__dirname, '..');
 
 const inputPath = path.resolve(
-    repositoryRoot,
+    workspaceRoot,
     inputFile
 );
 
-// Все относительные пути в pipeline считаются
-// относительно корня репозитория.
-process.chdir(repositoryRoot);
+// Все относительные пути сборки относятся
+// к репозиторию с лекциями.
+process.chdir(workspaceRoot);
 
-const extensionDevelopmentPath =
-    path.resolve(
-        __dirname,
-        'fake_extension'
-    );
+const extensionDevelopmentPath = path.join(
+    actionRoot,
+    'ci',
+    'fake_extension'
+);
 
-const extensionTestsPath =
-    path.resolve(
-        __dirname,
-        'export-runner.js'
-    );
+const extensionTestsPath = path.join(
+    actionRoot,
+    'ci',
+    'export-runner.js'
+);
 
 const presentationExtensionId =
     'bzzzil.vscode-asciidoc-presentation';
@@ -47,46 +53,31 @@ const presentationExtensionId =
 const asciidoctorExtensionId =
     'asciidoctor.asciidoctor-vscode';
 
-const extensionsDir =
-    path.resolve(
-        repositoryRoot,
-        '.vscode-test',
-        'extensions'
+const extensionsDir = path.join(
+    process.env.RUNNER_TEMP || os.tmpdir(),
+    'asciidoc-lecture-publisher',
+    'extensions'
+);
+
+async function installExtensions(vscodeExecutablePath) {
+    console.log('Installing VS Code extensions...');
+    console.log(`Extensions directory: ${extensionsDir}`);
+
+    fs.mkdirSync(extensionsDir, {
+        recursive: true
+    });
+
+    const vscodeDir = path.dirname(
+        vscodeExecutablePath
     );
 
-async function installExtensions(
-    vscodeExecutablePath
-) {
-    console.log(
-        'Installing VS Code extensions...'
+    const cliPath = path.join(
+        vscodeDir,
+        'bin',
+        'code'
     );
 
-    console.log(
-        `Extensions directory: ${extensionsDir}`
-    );
-
-    fs.mkdirSync(
-        extensionsDir,
-        {
-            recursive: true
-        }
-    );
-
-    const vscodeDir =
-        path.dirname(
-            vscodeExecutablePath
-        );
-
-    const cliPath =
-        path.join(
-            vscodeDir,
-            'bin',
-            'code'
-        );
-
-    console.log(
-        `VS Code CLI: ${cliPath}`
-    );
+    console.log(`VS Code CLI: ${cliPath}`);
 
     if (!fs.existsSync(cliPath)) {
         throw new Error(
@@ -99,22 +90,21 @@ async function installExtensions(
         asciidoctorExtensionId
     ];
 
-    const result =
-        cp.spawnSync(
-            cliPath,
-            [
-                '--extensions-dir',
-                extensionsDir,
-                '--install-extension',
-                ...extensions,
-                '--force'
-            ],
-            {
-                encoding: 'utf8',
-                stdio: 'inherit',
-                cwd: repositoryRoot
-            }
-        );
+    const result = cp.spawnSync(
+        cliPath,
+        [
+            '--extensions-dir',
+            extensionsDir,
+            '--install-extension',
+            ...extensions,
+            '--force'
+        ],
+        {
+            encoding: 'utf8',
+            stdio: 'inherit',
+            cwd: workspaceRoot
+        }
+    );
 
     console.log(
         `Extension installer exit code: ${result.status}`
@@ -130,27 +120,17 @@ async function installExtensions(
         );
     }
 
-    console.log(
-        'Contents of extensions directory:'
-    );
+    console.log('Contents of extensions directory:');
 
-    for (const entry of fs.readdirSync(
-        extensionsDir
-    )) {
-        console.log(
-            `  ${entry}`
-        );
+    for (const entry of fs.readdirSync(extensionsDir)) {
+        console.log(`  ${entry}`);
     }
 }
 
 async function main() {
-    console.log(
-        `Repository root: ${repositoryRoot}`
-    );
-
-    console.log(
-        `Input file: ${inputPath}`
-    );
+    console.log(`Workspace root: ${workspaceRoot}`);
+    console.log(`Action root: ${actionRoot}`);
+    console.log(`Input file: ${inputPath}`);
 
     if (!fs.existsSync(inputPath)) {
         throw new Error(
@@ -158,9 +138,25 @@ async function main() {
         );
     }
 
-    console.log(
-        'Downloading VS Code...'
-    );
+    if (!fs.statSync(inputPath).isFile()) {
+        throw new Error(
+            `Input path is not a file: ${inputPath}`
+        );
+    }
+
+    if (!fs.existsSync(extensionDevelopmentPath)) {
+        throw new Error(
+            `Fake extension does not exist: ${extensionDevelopmentPath}`
+        );
+    }
+
+    if (!fs.existsSync(extensionTestsPath)) {
+        throw new Error(
+            `Export runner does not exist: ${extensionTestsPath}`
+        );
+    }
+
+    console.log('Downloading VS Code...');
 
     const vscodeExecutablePath =
         await downloadAndUnzipVSCode();
@@ -169,13 +165,9 @@ async function main() {
         `VS Code downloaded: ${vscodeExecutablePath}`
     );
 
-    await installExtensions(
-        vscodeExecutablePath
-    );
+    await installExtensions(vscodeExecutablePath);
 
-    console.log(
-        'Starting VS Code test instance...'
-    );
+    console.log('Starting VS Code test instance...');
 
     await runTests({
         vscodeExecutablePath,
@@ -188,17 +180,11 @@ async function main() {
         ]
     });
 
-    console.log(
-        'VS Code test instance finished'
-    );
+    console.log('VS Code test instance finished');
 }
 
 main().catch(error => {
-    console.error(
-        'Export failed:'
-    );
-
+    console.error('Export failed:');
     console.error(error);
-
     process.exit(1);
 });

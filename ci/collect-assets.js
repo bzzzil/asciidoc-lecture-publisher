@@ -1,3 +1,4 @@
+
 const fs = require('fs');
 const path = require('path');
 
@@ -30,7 +31,6 @@ function collectImages(inputFile, outputDir) {
     );
 
     const imagePattern = /image::?([^\[\s]+)\[/g;
-
     const images = new Set();
 
     for (const match of data.matchAll(imagePattern)) {
@@ -54,6 +54,12 @@ function collectImages(inputFile, outputDir) {
             );
         }
 
+        if (!fs.statSync(source).isFile()) {
+            throw new Error(
+                `Referenced image is not a file: ${imagePath}`
+            );
+        }
+
         fs.mkdirSync(
             path.dirname(target),
             {
@@ -61,21 +67,17 @@ function collectImages(inputFile, outputDir) {
             }
         );
 
-        fs.copyFileSync(
-            source,
-            target
-        );
+        fs.copyFileSync(source, target);
 
         console.log(`Copied image: ${imagePath}`);
     }
 
-    console.log(
-        `Collected ${images.size} image(s)`
-    );
+    console.log(`Collected ${images.size} image(s)`);
 }
 
-function collectStyles(outputDir) {
-    const sourceDir = path.resolve(
+function collectStyles(outputDir, workspaceRoot) {
+    const sourceDir = path.join(
+        workspaceRoot,
         'styles'
     );
 
@@ -84,16 +86,10 @@ function collectStyles(outputDir) {
         'styles'
     );
 
-    copyDirectory(
-        sourceDir,
-        targetDir
-    );
+    copyDirectory(sourceDir, targetDir);
 }
 
-function collectExtensionLibs(
-    extension,
-    outputDir
-) {
+function collectExtensionLibs(extension, outputDir) {
     const extensionDir = extension.extensionPath;
 
     const sourceDir = path.join(
@@ -106,16 +102,14 @@ function collectExtensionLibs(
         'libs'
     );
 
-    copyDirectory(
-        sourceDir,
-        targetDir
-    );
+    copyDirectory(sourceDir, targetDir);
 }
 
 function collectAssets(
     inputFile,
     outputDir,
-    extension
+    extension,
+    workspaceRoot
 ) {
     collectImages(
         inputFile,
@@ -123,7 +117,8 @@ function collectAssets(
     );
 
     collectStyles(
-        outputDir
+        outputDir,
+        workspaceRoot
     );
 
     collectExtensionLibs(
@@ -135,3 +130,4 @@ function collectAssets(
 module.exports = {
     collectAssets
 };
+
