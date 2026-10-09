@@ -1,0 +1,13 @@
+{
+  "name": "lecture-ci-runner",
+  "displayName": "Lecture CI Runner",
+  "version": "0.0.1",
+  "publisher": "bzzzil",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "*"
+  ],
+  "main": "./extension.js"
+}

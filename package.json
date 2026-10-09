@@ -1,0 +1,20 @@
+{
+  "name": "tiiit",
+  "version": "1.0.0",
+  "description": "Лекции по дисциплине «Традиционные и интеллектуальные информационные технологии».",
+  "scripts": {
+    "export": "node ci/export-presentation.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@dev.bzzzil.io:bzzzil/bstu-tiiit.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "CC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@vscode/test-electron": "^3.1.0",
+    "playwright": "^1.63.0"
+  }
+}
